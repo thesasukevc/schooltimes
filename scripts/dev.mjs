@@ -1,0 +1,7 @@
+import {createServer} from 'node:http';
+import {DatabaseSync} from 'node:sqlite';
+import {mkdirSync,readFileSync} from 'node:fs';
+import worker from '../dist/server/index.js';
+mkdirSync('.data',{recursive:true});const sql=new DatabaseSync('.data/preview.sqlite');sql.exec('PRAGMA foreign_keys=ON');if(!sql.prepare("SELECT name FROM sqlite_master WHERE name='users'").get())sql.exec(readFileSync('drizzle/0000_school.sql','utf8'));
+const DB={prepare(query){let values=[];const s={bind(...v){values=v;return s;},async first(){return sql.prepare(query).get(...values)||null;},async all(){return {results:sql.prepare(query).all(...values)};},async run(){return sql.prepare(query).run(...values);}};return s;},async batch(statements){sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
+createServer(async(req,res)=>{try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const response=await worker.fetch(new Request('http://'+req.headers.host+req.url,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:Buffer.concat(chunks)}:{})}),{DB});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500);res.end('Server xatosi');}}).listen(Number(process.env.PORT||4173),'0.0.0.0');
